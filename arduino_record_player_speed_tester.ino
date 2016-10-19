@@ -1,9 +1,40 @@
-#if defined(__AVR_ATmega328P__)
-  #define SENSE_PIN 3
-#endif
-#if defined(__AVR_ATtinyX313__)
-  // attiny4314 INT0 on PD2/Arduino D3. Express in attachInterrupt as 0.
-  #define SENSE_PIN 4
+/*
+Arduino record player speed tester using magnetic hall effect sensors
+
+Matthew Nielsen, (C) 2016
+https://github.com/xunker/arduino_record_player_speed_tester
+
+*/
+
+/* Do you want to use real floating-point math or fake it with integer-only
+   math? On the ATTiny4313, real floating-point uses an extra 2KB of flash.
+   Using true floats give two decimal places of precision, where as integer
+   math gives one one decimal place. Either should be sufficient for showing
+   33.3 or 16.6 speeds. */
+//#define USE_FLOATING_POINT
+
+/* Enable RPM output on Serial? Note: ATTiny4313 can't use an external crystal
+   and have serial output enabled at the same time. */
+//#define ENABLE_SERIAL
+
+/* Use pin interrupts to detect RPMs? By default, you will want this unless you
+   are changing pin assignments. If commented out, the pin will be polled
+   continuously to look for changes. This would be good option if you don't have
+   a free pin that supports external interrupts. */
+#define USE_INTERRUPTS
+
+/* You can disable the numeric display complete by commenting this out. Why
+   would you want to? Maybe you want serial output only, or you are testing
+   with a different display or device. Disabling the display will also stop
+   the SevSeg library from loading which can lower memory requirements. */
+#define ENABLE_DISPLAY
+
+/* The led indicator. If this is a platform that defines LED_BUILTIN, we use
+   that. Otherwise, assume pin 13. */
+#ifdef LED_BUILTIN
+  #define LED_PIN LED_BUILTIN
+#else
+  #define LED_PIN 13
 #endif
 
 /* For input smoothing, read the sensor this many times consecutively and then
@@ -13,17 +44,31 @@
    Comment it out to remove the delay. */
 #define DELAY_BETWEEN_READS 1
 
-//#define USE_FLOATING_POINT
-//#define ENABLE_SERIAL
-#define ENABLE_DISPLAY
-#define USE_INTERRUPTS
+/* ATTiny4313 only: Are you using an external crystal? In that case, we need
+   free-up pins 4/5 (D2/D3). We relocate them to 2/3 (D0/D1), but that also
+   means we can't use Serial at the same time. */
+#define USE_EXTERNAL_CRYSTAL
+
+/* SENSE_PIN is where the signal output of the hall effect sensor is read.
+   Ideally, this should be a pin that supports external interrupts*/
+#if defined(__AVR_ATmega328P__)
+  #define SENSE_PIN 3
+#endif
+#if defined(__AVR_ATtinyX313__)
+  // attiny4314 INT0. Express in attachInterrupt as 0.
+  #define SENSE_PIN 4
+#endif
+
+/* --- configuration ends here -- */
+
+#ifdef USE_EXTERNAL_CRYSTAL
+  #undef ENABLE_SERIAL
+#endif
 
 #ifndef USE_INTERRUPTS
   boolean currentSensePinState = false;
   boolean previousSensePinState = false;
 #endif
-
-#define LED_PIN 13
 
 volatile boolean recordPass = false;
 unsigned int thisPass = 0;
@@ -48,7 +93,7 @@ unsigned int elapsed = 0;
 #endif
 
 void setup() {
-  
+
   #ifdef ENABLE_SERIAL
     Serial.begin(9600);
     //while (!Serial) {
@@ -58,17 +103,17 @@ void setup() {
     delay(1000);
     Serial.println("Ready.");
   #endif
-  
-  
+
+
   pinMode(LED_PIN, OUTPUT);
 //  pinMode(SENSE_PIN, INPUT_PULLUP);
   pinMode(SENSE_PIN, INPUT_PULLUP);
 
   const byte numDigits = 4;
-  
-  /* 
+
+  /*
    12......7
-   +-------+ 
+   +-------+
    |8.8.8.8|
    +-------+
    1.......6
@@ -101,15 +146,15 @@ void setup() {
     A2 4
     A3 10
 
-    
+
     Display pin mapping for attiny4313
 
     Arduino   Display
     Driven pins -- need resistors
     6  6
     5  8
-    3  9
-    2  12
+    3  9  (alt: D1 if using external crystal)
+    2  12 (alt: D0 if using external crystal)
 
     undriven -- no resistor needed
     7  11
@@ -120,19 +165,23 @@ void setup() {
     12 3
     11 4
     8  10
-   
+
   */
   #ifdef ENABLE_DISPLAY
-  
+
     #if defined(__AVR_ATmega328P__)
       byte digitPins[] = {4, 5, 6, 8};
       byte segmentPins[] = {9, 11, A2, A0, 12, A3, 10, A1};
     #endif
     #if defined(__AVR_ATtinyX313__)
-      byte digitPins[] = {6,5,3,2};
-      byte segmentPins[] = {7, 9, 11, 14, 15, 8, 10, 12}; 
+      #ifdef USE_EXTERNAL_CRYSTAL
+        byte digitPins[] = {6,5,1,0};
+      #else
+        byte digitPins[] = {6,5,3,2};
+      #endif
+      byte segmentPins[] = {7, 9, 11, 14, 15, 8, 10, 12};
     #endif
-    
+
     sevseg.begin(COMMON_CATHODE, numDigits, digitPins, segmentPins);
 //  sevseg.setBrightness(90);
   #endif
@@ -165,7 +214,7 @@ void loop() {
     if (readSensor()) {
       thisPass = millis();
       elapsed = thisPass - lastPass;
-      
+
       #if defined(ENABLE_SERIAL)
         Serial.println(thisPass);
         Serial.println(elapsed);
@@ -176,9 +225,9 @@ void loop() {
         #ifdef USE_FLOATING_POINT
           // 60,000 milliseconds in 1 minute
           rpm = 60000.0 / elapsed;
-        #else  
+        #else
           /* Use integer math to fake floating-point. Multiply number of
-           * seconds in a minute by 10 and then place the decimal point 
+           * seconds in a minute by 10 and then place the decimal point
            * before the "tens" column on the display so we have a reasonable
            * facsimile. Floating-point math uses an extra 2Kb on some tiny
            * MCUs like the ATTiny2313/ATTiny4313.
@@ -191,7 +240,7 @@ void loop() {
           Serial.print("RPM: ");
           Serial.println(rpm);
         #endif
-          
+
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         lastPass = thisPass;
       }
@@ -235,10 +284,8 @@ void loop() {
     }
 
     if (smoothDigitalReadTotal >= (TIMES_TO_READ_SENSOR/2)) {
-      // digitalWrite(LED_PIN, HIGH);
       return HIGH;
     } else {
-      // digitalWrite(LED_PIN, LOW);
       return LOW;
     }
   }
@@ -247,4 +294,3 @@ void loop() {
     digitalRead(SENSE_PIN);
   }
 #endif
-
