@@ -4,6 +4,8 @@ Arduino record player speed tester using magnetic hall effect sensors
 Matthew Nielsen, (C) 2016
 https://github.com/xunker/arduino_record_player_speed_tester
 
+Last updated Oct 20, 2016.
+
 */
 
 /* Do you want to use real floating-point math or fake it with integer-only
@@ -43,6 +45,11 @@ https://github.com/xunker/arduino_record_player_speed_tester
 /* Delay between consecutive reads during input smoothing, in milliseconds.
    Comment it out to remove the delay. */
 #define DELAY_BETWEEN_READS 1
+
+/* Average the number of RPM reads over this many times. If commented out, the
+   current instantaneous RPM will be returned.
+*/
+#define RPM_AVERAGE 3
 
 /* ATTiny4313 only: Are you using an external crystal? In that case, we need
    free-up pins 4/5 (D2/D3). We relocate them to 2/3 (D0/D1), but that also
@@ -224,7 +231,11 @@ void loop() {
 
         #ifdef USE_FLOATING_POINT
           // 60,000 milliseconds in 1 minute
-          rpm = 60000.0 / elapsed;
+          #ifdef RPM_AVERAGE
+            rpm = 60000.0 / elapsed;
+          #else
+            rpm = getAverageRPM(60000.0 / elapsed);
+          #endif
         #else
           /* Use integer math to fake floating-point. Multiply number of
            * seconds in a minute by 10 and then place the decimal point
@@ -232,7 +243,11 @@ void loop() {
            * facsimile. Floating-point math uses an extra 2Kb on some tiny
            * MCUs like the ATTiny2313/ATTiny4313.
            */
-          rpm = 600000 / elapsed; // integer only
+          #ifdef RPM_AVERAGE
+            rpm =  getAverageRPM(600000 / elapsed); // integer only
+          #else
+            rpm = 600000 / elapsed; // integer only
+          #endif
           if (rpm < 100) { rpm = 0; }
         #endif
 
@@ -293,4 +308,42 @@ void loop() {
   boolean readSensor() {
     digitalRead(SENSE_PIN);
   }
+#endif
+
+#ifdef RPM_AVERAGE
+  uint8_t averageRPMCounter = 0;
+
+  #ifdef USE_FLOATING_POINT
+//    float averageRPMCounter = 0.0;
+    float averageRPMHistory[RPM_AVERAGE];
+    float getAverageRPM(float currentRPM) {
+      averageRPMHistory[averageRPMCounter] = currentRPM;
+      averageRPMCounter++;
+      if (averageRPMCounter > RPM_AVERAGE) {
+        averageRPMCounter = 0;
+      }
+
+      float averageRPMTotal = 0;
+      for (uint8_t i = 0; i < RPM_AVERAGE;i++) {
+        averageRPMTotal += averageRPMHistory[i];
+      }
+      return (averageRPMTotal/RPM_AVERAGE);
+    }
+  #else
+//    unsigned int averageRPMCounter = 0;
+    unsigned int averageRPMHistory[RPM_AVERAGE];
+    unsigned int getAverageRPM(unsigned int currentRPM) {
+      averageRPMHistory[averageRPMCounter] = currentRPM;
+      averageRPMCounter++;
+      if (averageRPMCounter > RPM_AVERAGE) {
+        averageRPMCounter = 0;
+      }
+
+      unsigned int averageRPMTotal = 0;
+      for (uint8_t i = 0; i < RPM_AVERAGE;i++) {
+        averageRPMTotal += averageRPMHistory[i];
+      }
+      return (averageRPMTotal/RPM_AVERAGE);
+    }
+  #endif
 #endif

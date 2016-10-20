@@ -110,7 +110,9 @@ of the same ATTiny4313 using a 16mHz external crystal. Your mileage may vary.
 
 #### Changes
 
-v1.0 Oct 19, 2016
+* Oct 20, 2016
+  * Added average RPM display option.
+* Oct 19, 2016
   * Initial
 
 #### License
