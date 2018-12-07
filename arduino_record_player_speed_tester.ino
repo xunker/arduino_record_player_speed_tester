@@ -127,7 +127,7 @@ Last updated December 2018.
     /* When the display indicates an event via CONTIUOUS_UPDATE_MESSAGE, this is
        how long it stays on for. */
     #define DISPLAY_BLANKED_FOR 50 // milliseconds
-    unsigned long displayBlankedUntil = 0;
+    uint8_t displayBlankedFor = 0;
   #endif
 #else
   #undef INDICATE_CONTIUOUS_UPDATE
@@ -162,7 +162,7 @@ unsigned int elapsed = 0;
 #ifdef LED_BLINK
   // When the LED is toggled, this is how long it stays on for
   #define LED_ON_FOR 50 // milliseconds
-  unsigned long ledOnUntil = 0;
+  uint8_t ledOnFor = 0;
 #endif
 
 void setup() {
@@ -262,30 +262,51 @@ void setup() {
   #endif
 }
 
+void updateDisplayRPM() {
+  sevseg.setNumber(rpm, 2);
+}
+
+unsigned long currentMillis = 0;
+unsigned long previousMillis = 0;
 void loop() {
-  #ifdef LED_BLINK
-    if ((ledOnUntil > 0) && (ledOnUntil > millis())) {
-      digitalWrite(LED_PIN, HIGH);
-    } else {
-      digitalWrite(LED_PIN, LOW);
-    }
-  #endif
+  currentMillis = millis();
 
-  #ifdef ENABLE_DISPLAY
-    #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
-      if (displayBlankedUntil > millis()) {
-        sevseg.blank();
+  if (previousMillis > 0) {
+    #ifdef LED_BLINK
+      if (ledOnFor > 0) {
+        digitalWrite(LED_PIN, HIGH);
+        if ((currentMillis - previousMillis) > ledOnFor) {
+          ledOnFor = 0;
+        } else {
+          ledOnFor = ledOnFor - (currentMillis - previousMillis);
+        }
       } else {
-        sevseg.setNumber(rpm, 2);
+        digitalWrite(LED_PIN, LOW);
       }
-
-    #else
-
-      sevseg.setNumber(rpm, 2);
     #endif
 
-    sevseg.refreshDisplay(); // Must run repeatedly to keep display stable
-  #endif
+    #ifdef ENABLE_DISPLAY
+      #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
+        if (displayBlankedFor > 0) {
+          if ((currentMillis - previousMillis) > displayBlankedFor) {
+            displayBlankedFor = 0;
+          } else {
+            displayBlankedFor = displayBlankedFor - (currentMillis - previousMillis);
+          }
+
+          sevseg.blank();
+        } else {
+          updateDisplayRPM();
+        }
+
+      #else
+
+        updateDisplayRPM();
+      #endif
+
+      sevseg.refreshDisplay(); // Must run repeatedly to keep display stable
+    #endif
+  }
 
   #ifndef USE_INTERRUPTS
     if (previousSensePinState != (currentSensePinState = readSensor())) {
@@ -297,7 +318,7 @@ void loop() {
   if (recordPass) {
     recordPass = false;
     if (readSensor()) {
-      thisPass = millis();
+      thisPass = currentMillis;
       elapsed = thisPass - lastPass;
 
       #if defined(ENABLE_SERIAL)
@@ -344,18 +365,17 @@ void loop() {
     #endif
 
     #ifdef CONTINUOUS_UPDATES
-      nextUpdate = millis() + MAXIMUM_ROTATION;
+      nextUpdate = currentMillis + MAXIMUM_ROTATION;
     #endif
   }
 
   #ifdef RPM_AVERAGE
     #ifdef CONTINUOUS_UPDATES
-      unsigned long currentMillis = millis();
       if (nextUpdate < currentMillis) {
 
         #ifdef INDICATE_CONTIUOUS_UPDATE
           #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
-            displayBlankedUntil = millis() + DISPLAY_BLANKED_FOR;
+            displayBlankedFor = DISPLAY_BLANKED_FOR;
           #else
             toggleLED();
           #endif
@@ -372,11 +392,12 @@ void loop() {
     #endif
   #endif
 
+  previousMillis = currentMillis;
 }
 
 void toggleLED() {
   #ifdef LED_BLINK
-    ledOnUntil = millis() + LED_ON_FOR;
+    ledOnFor = LED_ON_FOR;
   #else
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   #endif
@@ -432,24 +453,19 @@ void toggleLED() {
   #ifdef USE_FLOATING_POINT
     float averageRPMHistory[RPM_AVERAGE];
     float getAverageRPM(float currentRPM) {
-      averageRPMHistory[averageRPMCounter] = currentRPM;
-      averageRPMCounter++;
-      if (averageRPMCounter > RPM_AVERAGE) {
-        averageRPMCounter = 0;
-      }
-
       float averageRPMTotal = 0;
   #else
     unsigned int averageRPMHistory[RPM_AVERAGE];
     unsigned int getAverageRPM(unsigned int currentRPM) {
-      averageRPMHistory[averageRPMCounter] = currentRPM;
-      averageRPMCounter++;
-      if (averageRPMCounter > RPM_AVERAGE) {
-        averageRPMCounter = 0;
-      }
-
       unsigned int averageRPMTotal = 0;
-    #endif
+  #endif
+
+    averageRPMHistory[averageRPMCounter] = currentRPM;
+    averageRPMCounter++;
+
+    if (averageRPMCounter >= RPM_AVERAGE) {
+      averageRPMCounter = 0;
+    }
 
     for (uint8_t i = 0; i < RPM_AVERAGE;i++) {
       averageRPMTotal += averageRPMHistory[i];
