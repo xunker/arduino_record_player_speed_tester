@@ -110,8 +110,16 @@ of the same ATTiny4313 using a 16mHz external crystal. Your mileage may vary.
 
 #### Changes
 
+* December 2018
+  * Added "CONTINUOUS_UPDATES" mode that updates the average display even if
+    the hall sensor has not been triggered.
+  * Added option to blink the LED instead of flip-flopping it.
+  * Corrected math error on the average RPM buffer size.
+  * General cleanup.
+
 * Oct 20, 2016
   * Added average RPM display option.
+
 * Oct 19, 2016
   * Initial
 
