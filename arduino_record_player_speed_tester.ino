@@ -123,11 +123,12 @@ Last updated December 2018.
 #ifdef CONTINUOUS_UPDATES
   unsigned long nextUpdate = 0;
 
+
   #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
     /* When the display indicates an event via CONTIUOUS_UPDATE_MESSAGE, this is
        how long it stays on for. */
     #define DISPLAY_BLANKED_FOR 50 // milliseconds
-    uint8_t displayBlankedFor = 0;
+    uint8_t displayBlankedFor = 0; // change to uint16_t if DISPLAY_BLANKED_FOR > 255
   #endif
 #else
   #undef INDICATE_CONTIUOUS_UPDATE
@@ -162,7 +163,7 @@ unsigned int elapsed = 0;
 #ifdef LED_BLINK
   // When the LED is toggled, this is how long it stays on for
   #define LED_ON_FOR 50 // milliseconds
-  uint8_t ledOnFor = 0;
+  uint8_t ledOnFor = 0; // change to uint16_t if LED_ON_FOR > 255
 #endif
 
 void setup() {
@@ -329,7 +330,9 @@ void loop() {
       if (elapsed > MINIMUM_ROTATION) {
 
         #ifdef USE_FLOATING_POINT
-          // 60,000 milliseconds in 1 minute
+          /* The number "60000.0" below is:
+           *  60 (seconds per minute) times 1000 (milliseconds per second)
+           */
           #ifdef RPM_AVERAGE
             rpm = 60000.0 / elapsed;
           #else
@@ -337,17 +340,19 @@ void loop() {
           #endif
         #else
           /* Use integer math to fake floating-point. Multiply number of
-           * seconds in a minute by 10 and then place the decimal point
+           * milliseconds in a minute by 100 and then place the decimal point
            * before the "tens" column on the display so we have a reasonable
            * facsimile. Floating-point math uses an extra 2Kb on some tiny
            * MCUs like the ATTiny2313/ATTiny4313.
+           *
+           * The number "6000000" is:
+           *  60 (seconds per minute) times 1000 (milliseconds per second) times 100
            */
           #ifdef RPM_AVERAGE
             rpm =  getAverageRPM(6000000 / elapsed); // integer only
           #else
             rpm = 6000000 / elapsed; // integer only
           #endif
-          if (rpm < 100) { rpm = 0; }
         #endif
 
         #ifdef ENABLE_SERIAL
