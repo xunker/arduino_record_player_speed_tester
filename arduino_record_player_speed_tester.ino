@@ -8,6 +8,8 @@ Last updated December 2018.
 
 */
 
+/* --- basic configuration begins here --- */
+
 /* Do you want to use real floating-point math or fake it with integer-only
    math? On the ATTiny4313, real floating-point uses an extra 2KB of flash.
    Using true floats give two decimal places of precision, where as integer
@@ -72,6 +74,10 @@ Last updated December 2018.
   #define SENSE_PIN 4
 #endif
 
+/* --- basic configuration ends here --- */
+
+/* --- extended configuration begins here --- */
+
 /* MAXIMUM_ROTATION is the longest amount of time one revolution of the
    turntable should take. A value of 2 seconds (2000 milliseconds) is a good
    number for 33 1/3 RPM or faster turntables.
@@ -98,18 +104,37 @@ Last updated December 2018.
    only be calculated when SENSE_PIN is triggered. */
 #define CONTINUOUS_UPDATES
 
+/* show on LED or display when a CONTINUOUS_UPDATES event occurs */
+#define INDICATE_CONTIUOUS_UPDATE
+
+/* show a CONTINUOUS_UPDATES has occurred via the display instead of the LED.
+   If enabled, the display will briefly blank the display whenever a
+   continous update event occurs.
+*/
+#define INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
+
 /* If LED_BLINK is uncommented, the status LED will quickly blink when SENSE_PIN
    is triggered. If it is commented-out, the status LED will toggle between
    on and off every time SENSE_PIN is triggered. */
 #define LED_BLINK
 
-/* --- configuration ends here -- */
+/* --- extended configuration ends here --- */
 
 #ifdef CONTINUOUS_UPDATES
   unsigned long nextUpdate = 0;
+
+  #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
+    /* When the display indicates an event via CONTIUOUS_UPDATE_MESSAGE, this is
+       how long it stays on for. */
+    #define DISPLAY_BLANKED_FOR 50 // milliseconds
+    unsigned long displayBlankedUntil = 0;
+  #endif
+#else
+  #undef INDICATE_CONTIUOUS_UPDATE
+  #undef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
 #endif
 
-#ifdef USE_EXTERNAL_CRYSTAL
+#ifdef USE_EXTERNAL_CRYSTAL && defined(__AVR_ATtinyX313__)
   #undef ENABLE_SERIAL
 #endif
 
@@ -136,8 +161,8 @@ unsigned int elapsed = 0;
 
 #ifdef LED_BLINK
   // When the LED is toggled, this is how long it stays on for
-  #define LED_ON_FOR 100 // Cycles, 100 roughly equal to 1/10 second at 16mhz
-  uint8_t ledOn = 0; // if LED_ON_FOR > 255, change this to uint16_t
+  #define LED_ON_FOR 50 // milliseconds
+  unsigned long ledOnUntil = 0;
 #endif
 
 void setup() {
@@ -239,19 +264,24 @@ void setup() {
 
 void loop() {
   #ifdef LED_BLINK
-    if (ledOn > 0) {
-      ledOn--;
-      if (ledOn <= 0) {
-        digitalWrite(LED_PIN, LOW);
-      }
+    if ((ledOnUntil > 0) && (ledOnUntil > millis())) {
+      digitalWrite(LED_PIN, HIGH);
+    } else {
+      digitalWrite(LED_PIN, LOW);
     }
   #endif
 
   #ifdef ENABLE_DISPLAY
-    #ifdef USE_FLOATING_POINT
-      sevseg.setNumber(rpm, 2);
+    #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
+      if (displayBlankedUntil > millis()) {
+        sevseg.blank();
+      } else {
+        sevseg.setNumber(rpm, 2);
+      }
+
     #else
-      sevseg.setNumber(rpm, 1);
+
+      sevseg.setNumber(rpm, 2);
     #endif
 
     sevseg.refreshDisplay(); // Must run repeatedly to keep display stable
@@ -292,9 +322,9 @@ void loop() {
            * MCUs like the ATTiny2313/ATTiny4313.
            */
           #ifdef RPM_AVERAGE
-            rpm =  getAverageRPM(600000 / elapsed); // integer only
+            rpm =  getAverageRPM(6000000 / elapsed); // integer only
           #else
-            rpm = 600000 / elapsed; // integer only
+            rpm = 6000000 / elapsed; // integer only
           #endif
           if (rpm < 100) { rpm = 0; }
         #endif
@@ -305,6 +335,7 @@ void loop() {
         #endif
 
         toggleLED();
+
         lastPass = thisPass;
       }
     }
@@ -315,32 +346,37 @@ void loop() {
     #ifdef CONTINUOUS_UPDATES
       nextUpdate = millis() + MAXIMUM_ROTATION;
     #endif
-  } else {
-    #ifdef RPM_AVERAGE
-      #ifdef CONTINUOUS_UPDATES
-        unsigned long currentMillis = millis();
-        if (nextUpdate < currentMillis) {
-          toggleLED();
-
-          #ifdef USE_FLOATING_POINT
-            rpm = getAverageRPM(0.0);
-          #else
-            rpm = getAverageRPM(0);
-          #endif
-
-          nextUpdate = currentMillis + MAXIMUM_ROTATION;
-        }
-      #endif
-    #endif
   }
+
+  #ifdef RPM_AVERAGE
+    #ifdef CONTINUOUS_UPDATES
+      unsigned long currentMillis = millis();
+      if (nextUpdate < currentMillis) {
+
+        #ifdef INDICATE_CONTIUOUS_UPDATE
+          #ifdef INDICATE_CONTIUOUS_UPDATE_ON_DISPLAY
+            displayBlankedUntil = millis() + DISPLAY_BLANKED_FOR;
+          #else
+            toggleLED();
+          #endif
+        #endif
+
+        #ifdef USE_FLOATING_POINT
+          rpm = getAverageRPM(0.0);
+        #else
+          rpm = getAverageRPM(0);
+        #endif
+
+        nextUpdate = currentMillis + MAXIMUM_ROTATION;
+      }
+    #endif
+  #endif
+
 }
 
 void toggleLED() {
   #ifdef LED_BLINK
-    if (ledOn == 0) {
-      digitalWrite(LED_PIN, HIGH);
-      ledOn = LED_ON_FOR;
-    }
+    ledOnUntil = millis() + LED_ON_FOR;
   #else
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   #endif
@@ -403,11 +439,6 @@ void toggleLED() {
       }
 
       float averageRPMTotal = 0;
-      for (uint8_t i = 0; i < RPM_AVERAGE;i++) {
-        averageRPMTotal += averageRPMHistory[i];
-      }
-      return (averageRPMTotal/RPM_AVERAGE);
-    }
   #else
     unsigned int averageRPMHistory[RPM_AVERAGE];
     unsigned int getAverageRPM(unsigned int currentRPM) {
@@ -418,10 +449,12 @@ void toggleLED() {
       }
 
       unsigned int averageRPMTotal = 0;
-      for (uint8_t i = 0; i < RPM_AVERAGE;i++) {
-        averageRPMTotal += averageRPMHistory[i];
-      }
-      return (averageRPMTotal/RPM_AVERAGE);
+    #endif
+
+    for (uint8_t i = 0; i < RPM_AVERAGE;i++) {
+      averageRPMTotal += averageRPMHistory[i];
     }
-  #endif
+    return (averageRPMTotal/RPM_AVERAGE);
+  }
+
 #endif
