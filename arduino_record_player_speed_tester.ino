@@ -71,20 +71,25 @@ Last updated Oct 20, 2016.
   #define SENSE_PIN 4
 #endif
 
-/* MAXIMUM_ROTATION is the longest amount of time one revolution of the turntable should take. A value of 2 seconds (2000 milliseconds) is a good number for 33 1/3 RPM or faster
-turntables.
+/* MAXIMUM_ROTATION is the longest amount of time one revolution of the
+   turntable should take. A value of 2 seconds (2000 milliseconds) is a good
+   number for 33 1/3 RPM or faster turntables.
 
-If you are testing a very old phonograph that plays 16RPM or 8RPM records, you should adjust this number. You can calculate the maximum time one revolution should take by dividing 60 (number of second in a minute) by the RPM speed of the turntable. For a 16 2/3 RPM turntable that would be:
-  60 / 16.66 == 3.6s
-
+   If you are testing a very old phonograph that plays 16RPM or 8RPM records,
+   you should adjust this number. You can calculate the maximum time one
+   revolution should take by dividing 60 (number of second in a minute) by the
+   RPM speed of the turntable. For a 16 2/3 RPM turntable that would be:
+     60 / 16.66 == 3.6s
 */
 #define MAXIMUM_ROTATION 2000 // milliseconds
 
 /* MINIMUM_ROTATION is the minimum amount of time a single
-rotation should take. This is a "sanity check" to help us ignore
-noise or erronious signals on SENSE_PIN.
-This should be less than the amount of time one revolution of the
-turntable should take at the fastest speed you plan on testing. A value of 500 millisecond (0.5 second) is a good default and will work for turntables up to 78RPM. */
+   rotation should take. This is a "sanity check" to help us ignore
+   noise or erronious signals on SENSE_PIN.
+   This should be less than the amount of time one revolution of the
+   turntable should take at the fastest speed you plan on testing.
+   A value of 500 millisecond (0.5 second) is a good default and will work for
+   turntables up to 78RPM. */
 #define MINIMUM_ROTATION 500 // milliseconds
 
 /* if CONTINUOUS_UPDATES is enabled then the average will be calculated
@@ -137,7 +142,6 @@ void setup() {
 
 
   pinMode(LED_PIN, OUTPUT);
-//  pinMode(SENSE_PIN, INPUT_PULLUP);
   pinMode(SENSE_PIN, INPUT_PULLUP);
 
   const byte numDigits = 4;
@@ -214,7 +218,6 @@ void setup() {
     #endif
 
     sevseg.begin(COMMON_CATHODE, numDigits, digitPins, segmentPins);
-//  sevseg.setBrightness(90);
   #endif
 
   #if defined(USE_INTERRUPTS)
@@ -363,7 +366,6 @@ void toggleLED() {
   uint8_t averageRPMCounter = 0;
 
   #ifdef USE_FLOATING_POINT
-//    float averageRPMCounter = 0.0;
     float averageRPMHistory[RPM_AVERAGE];
     float getAverageRPM(float currentRPM) {
       averageRPMHistory[averageRPMCounter] = currentRPM;
@@ -379,7 +381,6 @@ void toggleLED() {
       return (averageRPMTotal/RPM_AVERAGE);
     }
   #else
-//    unsigned int averageRPMCounter = 0;
     unsigned int averageRPMHistory[RPM_AVERAGE];
     unsigned int getAverageRPM(unsigned int currentRPM) {
       averageRPMHistory[averageRPMCounter] = currentRPM;
