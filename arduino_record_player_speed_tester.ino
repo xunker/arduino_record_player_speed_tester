@@ -4,7 +4,7 @@ Arduino record player speed tester using magnetic hall effect sensors
 Matthew Nielsen, (C) 2016
 https://github.com/xunker/arduino_record_player_speed_tester
 
-Last updated Oct 20, 2016.
+Last updated December 2018.
 
 */
 
@@ -42,6 +42,7 @@ Last updated Oct 20, 2016.
 /* For input smoothing, read the sensor this many times consecutively and then
    return the average. Comment it out to used a conventional digitalRead. */
 #define TIMES_TO_READ_SENSOR 5
+
 /* Delay between consecutive reads during input smoothing, in milliseconds.
    Comment it out to remove the delay. */
 // #define DELAY_BETWEEN_READS 1 // milliseconds
@@ -54,7 +55,7 @@ Last updated Oct 20, 2016.
 
    If commented out, the current instantaneous RPM will be returned without
    being averaged over time. */
-#define RPM_AVERAGE 5
+#define RPM_AVERAGE 4
 
 /* ATTiny4313 only: Are you using an external crystal? In that case, we need
    free-up pins 4/5 (D2/D3). We relocate them to 2/3 (D0/D1), but that also
@@ -97,6 +98,11 @@ Last updated Oct 20, 2016.
    only be calculated when SENSE_PIN is triggered. */
 #define CONTINUOUS_UPDATES
 
+/* If LED_BLINK is uncommented, the status LED will quickly blink when SENSE_PIN
+   is triggered. If it is commented-out, the status LED will toggle between
+   on and off every time SENSE_PIN is triggered. */
+#define LED_BLINK
+
 /* --- configuration ends here -- */
 
 #ifdef CONTINUOUS_UPDATES
@@ -126,6 +132,12 @@ unsigned int elapsed = 0;
   // requires the older "2014" version of library, NOT the most current one on Github.
   #include "SevSeg.h"
   SevSeg sevseg; //Initiate a seven segment controller object
+#endif
+
+#ifdef LED_BLINK
+  // When the LED is toggled, this is how long it stays on for
+  #define LED_ON_FOR 100 // Cycles, 100 roughly equal to 1/10 second at 16mhz
+  uint8_t ledOn = 0; // if LED_ON_FOR > 255, change this to uint16_t
 #endif
 
 void setup() {
@@ -226,6 +238,15 @@ void setup() {
 }
 
 void loop() {
+  #ifdef LED_BLINK
+    if (ledOn > 0) {
+      ledOn--;
+      if (ledOn <= 0) {
+        digitalWrite(LED_PIN, LOW);
+      }
+    }
+  #endif
+
   #ifdef ENABLE_DISPLAY
     #ifdef USE_FLOATING_POINT
       sevseg.setNumber(rpm, 2);
@@ -244,10 +265,6 @@ void loop() {
   #endif
 
   if (recordPass) {
-    #ifdef CONTINUOUS_UPDATES
-      nextUpdate = millis() + MAXIMUM_ROTATION;
-    #endif
-
     recordPass = false;
     if (readSensor()) {
       thisPass = millis();
@@ -294,6 +311,10 @@ void loop() {
     #if defined(USE_INTERRUPTS)
       attachSenseInterrupt();
     #endif
+
+    #ifdef CONTINUOUS_UPDATES
+      nextUpdate = millis() + MAXIMUM_ROTATION;
+    #endif
   } else {
     #ifdef RPM_AVERAGE
       #ifdef CONTINUOUS_UPDATES
@@ -315,7 +336,14 @@ void loop() {
 }
 
 void toggleLED() {
-  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+  #ifdef LED_BLINK
+    if (ledOn == 0) {
+      digitalWrite(LED_PIN, HIGH);
+      ledOn = LED_ON_FOR;
+    }
+  #else
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+  #endif
 }
 
 #if defined(USE_INTERRUPTS)
