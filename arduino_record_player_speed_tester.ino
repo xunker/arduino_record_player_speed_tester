@@ -44,12 +44,17 @@ Last updated Oct 20, 2016.
 #define TIMES_TO_READ_SENSOR 5
 /* Delay between consecutive reads during input smoothing, in milliseconds.
    Comment it out to remove the delay. */
-#define DELAY_BETWEEN_READS 1
+// #define DELAY_BETWEEN_READS 1 // milliseconds
 
-/* Average the number of RPM reads over this many times. If commented out, the
-   current instantaneous RPM will be returned.
-*/
-#define RPM_AVERAGE 3
+/* Average the number of RPM reads over this many times. The larger the number
+   the more accurate a smoother the reported number will be. However, making
+   this number larger also means it will take that many rotations to get an
+   accurate averate and so start-up time will be slower. Also, the larger the
+   number, the more mempry (RAM) will be used.
+
+   If commented out, the current instantaneous RPM will be returned without
+   being averaged over time. */
+#define RPM_AVERAGE 5
 
 /* ATTiny4313 only: Are you using an external crystal? In that case, we need
    free-up pins 4/5 (D2/D3). We relocate them to 2/3 (D0/D1), but that also
