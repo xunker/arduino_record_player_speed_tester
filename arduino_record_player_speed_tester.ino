@@ -66,7 +66,32 @@ Last updated Oct 20, 2016.
   #define SENSE_PIN 4
 #endif
 
+/* MAXIMUM_ROTATION is the longest amount of time one revolution of the turntable should take. A value of 2 seconds (2000 milliseconds) is a good number for 33 1/3 RPM or faster
+turntables.
+
+If you are testing a very old phonograph that plays 16RPM or 8RPM records, you should adjust this number. You can calculate the maximum time one revolution should take by dividing 60 (number of second in a minute) by the RPM speed of the turntable. For a 16 2/3 RPM turntable that would be:
+  60 / 16.66 == 3.6s
+
+*/
+#define MAXIMUM_ROTATION 2000 // milliseconds
+
+/* MINIMUM_ROTATION is the minimum amount of time a single
+rotation should take. This is a "sanity check" to help us ignore
+noise or erronious signals on SENSE_PIN.
+This should be less than the amount of time one revolution of the
+turntable should take at the fastest speed you plan on testing. A value of 500 millisecond (0.5 second) is a good default and will work for turntables up to 78RPM. */
+#define MINIMUM_ROTATION 500 // milliseconds
+
+/* if CONTINUOUS_UPDATES is enabled then the average will be calculated
+   regularly, every MAXIMUM_ROTATION milliseconds. If it is not enabled, it will
+   only be calculated when SENSE_PIN is triggered. */
+#define CONTINUOUS_UPDATES
+
 /* --- configuration ends here -- */
+
+#ifdef CONTINUOUS_UPDATES
+  unsigned long nextUpdate = 0;
+#endif
 
 #ifdef USE_EXTERNAL_CRYSTAL
   #undef ENABLE_SERIAL
@@ -86,12 +111,6 @@ unsigned int elapsed = 0;
 #else
   unsigned int rpm = 0;
 #endif
-
-// How long should the built-in LED stay one when a rotation is detected?
-#define LED_ON_TIME 500 // milliseconds
-
-// Sanity check; ignore rotations faster than this to filter sensor noise.
-#define MINIMUM_ROTATION 500 // milliseconds
 
 #ifdef ENABLE_DISPLAY
   // requires the older "2014" version of library, NOT the most current one on Github.
@@ -217,6 +236,10 @@ void loop() {
   #endif
 
   if (recordPass) {
+    #ifdef CONTINUOUS_UPDATES
+      nextUpdate = millis() + MAXIMUM_ROTATION;
+    #endif
+
     recordPass = false;
     if (readSensor()) {
       thisPass = millis();
@@ -256,14 +279,35 @@ void loop() {
           Serial.println(rpm);
         #endif
 
-        digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+        toggleLED();
         lastPass = thisPass;
       }
     }
     #if defined(USE_INTERRUPTS)
       attachSenseInterrupt();
     #endif
+  } else {
+    #ifdef RPM_AVERAGE
+      #ifdef CONTINUOUS_UPDATES
+        unsigned long currentMillis = millis();
+        if (nextUpdate < currentMillis) {
+          toggleLED();
+
+          #ifdef USE_FLOATING_POINT
+            rpm = getAverageRPM(0.0);
+          #else
+            rpm = getAverageRPM(0);
+          #endif
+
+          nextUpdate = currentMillis + MAXIMUM_ROTATION;
+        }
+      #endif
+    #endif
   }
+}
+
+void toggleLED() {
+  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
 }
 
 #if defined(USE_INTERRUPTS)
